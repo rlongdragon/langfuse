@@ -5,9 +5,15 @@
  * on microsecond start_time, v3 tables on toDate(timestamp). Data still
  * lands inside recent UI time windows; a re-run on a later day writes a
  * fresh dated copy.
+ *
+ * SEEDER_ANCHOR_NOW=1 anchors at Date.now() instead — for feeding a live
+ * view with freshly-timestamped rows. This trades away same-day dedup, so
+ * pair it with a unique --id-prefix per run.
  */
 export const utcDayStartMs = (): number =>
-  Math.floor(Date.now() / 86_400_000) * 86_400_000;
+  process.env.SEEDER_ANCHOR_NOW === "1"
+    ? Date.now()
+    : Math.floor(Date.now() / 86_400_000) * 86_400_000;
 
 /**
  * Stateless per-index jitter for values that land in ClickHouse ORDER BY

@@ -1,3 +1,4 @@
+import { useHasOrganizationAccess } from "@/src/features/rbac";
 import { Button } from "@/src/components/ui/button";
 import { Switch } from "@/src/components/design-system/Switch/Switch";
 import { api } from "@/src/utils/api";
@@ -11,8 +12,7 @@ import {
   DialogTitle,
 } from "@/src/components/ui/dialog";
 import Header from "@/src/components/layouts/header";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
-import { useHasOrganizationAccess } from "@/src/features/rbac/utils/checkOrganizationAccess";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
 import {
   useLangfuseCloudRegion,
   useQueryOrganization,
@@ -60,6 +60,7 @@ export default function AIFeatureSwitch() {
       await updateSession();
       // Admins resolve org context from this query, not the session
       utils.organizations.byId.invalidate();
+      utils.inAppAgent.telemetryProject.invalidate();
     },
     onError: () => {
       setIsAITelemetrySwitchEnabled(aiTelemetryEnabled ?? true);
@@ -129,9 +130,8 @@ export default function AIFeatureSwitch() {
               <p className="text-sm">
                 This setting applies to all users and projects. Any data{" "}
                 <i>can</i> be sent to AWS Bedrock within the Langfuse data
-                region. Your data will not be used for training models.
-                Applicable HIPAA, SOC2, GDPR, and ISO 27001 compliance remains
-                intact.{" "}
+                region. Your data will not be used to train models. Applicable
+                HIPAA, SOC2, GDPR, and ISO 27001 compliance remains intact.{" "}
                 <a
                   href="https://langfuse.com/security/ai-features"
                   target="_blank"
@@ -139,14 +139,14 @@ export default function AIFeatureSwitch() {
                   className="text-primary inline-flex items-center gap-1 hover:underline"
                 >
                   More details in the docs here.
-                  <ExternalLink className="h-3 w-3" />
+                  <ExternalLink className="icon-sm" />
                 </a>
               </p>
             ) : (
               <p className="text-sm">
                 This setting applies to all users and projects. When enabled,
-                the assistant can send relevant project data to the model
-                provider configured by your instance administrator.
+                Halo can send relevant project data to the model provider
+                configured by your instance administrator.
               </p>
             )}
           </div>
@@ -158,7 +158,7 @@ export default function AIFeatureSwitch() {
             />
             {!hasAccess && (
               <span title="No access">
-                <LockIcon className="text-muted absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 transform" />
+                <LockIcon className="text-muted icon-base absolute top-1/2 right-3 -translate-y-1/2 transform" />
               </span>
             )}
           </div>
@@ -184,7 +184,7 @@ export default function AIFeatureSwitch() {
                 />
                 {!hasAccess && (
                   <span title="No access">
-                    <LockIcon className="text-muted absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 transform" />
+                    <LockIcon className="text-muted icon-base absolute top-1/2 right-3 -translate-y-1/2 transform" />
                   </span>
                 )}
               </div>
@@ -227,7 +227,7 @@ export default function AIFeatureSwitch() {
                     className="text-primary inline-flex items-center gap-1 hover:underline"
                   >
                     Learn more in the docs.
-                    <ExternalLink className="h-3 w-3" />
+                    <ExternalLink className="icon-sm" />
                   </a>
                 </>
               )}

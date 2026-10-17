@@ -1,3 +1,4 @@
+/* eslint-disable @repo/component-file-structure */
 import { Button } from "@/src/components/ui/button";
 import { api } from "@/src/utils/api";
 import { useState } from "react";
@@ -5,7 +6,8 @@ import type * as React from "react";
 import { PopoverController } from "@/src/components/ui/popover";
 import { Input } from "@/src/components/ui/input";
 import { Label } from "@/src/components/ui/label";
-import { toast } from "sonner";
+import { showSuccessToast, showToast } from "@/src/features/notifications";
+import { classifyTrpcToastError } from "@/src/utils/trpcErrorClassification";
 
 type RetryBackgroundMigrationPopoverControllerProps = {
   backgroundMigrationName: string;
@@ -26,10 +28,21 @@ export function RetryBackgroundMigrationPopoverController({
     api.backgroundMigrations.retry.useMutation({
       onSuccess: () => {
         utils.backgroundMigrations.invalidate();
-        toast.success("Migration scheduled for retry");
+        showSuccessToast({
+          operation: "background_migration.retry",
+          title: "Migration scheduled for retry",
+          description: "",
+        });
       },
       onError: (error) => {
-        toast.error(error?.message || "Failed to retry migration");
+        showToast({
+          type: "ERROR",
+          title: error?.message || "Failed to retry migration",
+          analytics: classifyTrpcToastError(
+            error,
+            "background_migration.retry",
+          ),
+        });
       },
       onSettled: () => {
         setIsLoading(false);
@@ -38,7 +51,15 @@ export function RetryBackgroundMigrationPopoverController({
 
   const handleRetry = async (closePopover: () => void) => {
     if (!adminApiKey.trim()) {
-      toast.error("Admin API key is required");
+      showToast({
+        type: "ERROR",
+        title: "Admin API key is required",
+        analytics: {
+          operation: "background_migration.retry",
+          errorOrigin: "frontend",
+          errorCategory: "user_input",
+        },
+      });
       return;
     }
     setIsLoading(true);

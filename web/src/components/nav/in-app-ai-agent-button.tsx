@@ -1,13 +1,13 @@
+/* eslint-disable @repo/component-file-structure */
 import { useCallback, useEffect } from "react";
-import { BotMessageSquare } from "lucide-react";
 
 import { Button } from "@/src/components/ui/button";
 import { KeyboardShortcut } from "@/src/components/design-system/KeyboardShortcut/KeyboardShortcut";
 import {
-  useIsInAppAgentLauncherVisible,
   useInAppAiAgent,
   type InAppAgentEntryPoint,
-} from "@/src/features/in-app-agent/components/InAppAiAgentProvider";
+} from "@/src/features/in-app-agent";
+import { HaloIcon } from "@/src/features/in-app-agent/components/HaloIcon";
 import { cn } from "@/src/utils/tailwind";
 
 /** Launcher only — the assistant window itself is rendered by
@@ -24,7 +24,6 @@ export const InAppAiAgentButton = ({
   prominent?: boolean;
 } = {}) => {
   const { open, setOpen, openAssistant, attentionCount } = useInAppAiAgent();
-  const isInAppAgentLauncherVisible = useIsInAppAgentLauncherVisible();
 
   const toggleAssistant = useCallback(
     (source: InAppAgentEntryPoint) => {
@@ -39,10 +38,6 @@ export const InAppAiAgentButton = ({
   );
 
   useEffect(() => {
-    if (!isInAppAgentLauncherVisible) {
-      return;
-    }
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         event.repeat ||
@@ -60,11 +55,7 @@ export const InAppAiAgentButton = ({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isInAppAgentLauncherVisible, toggleAssistant]);
-
-  if (!isInAppAgentLauncherVisible) {
-    return null;
-  }
+  }, [toggleAssistant]);
 
   const attentionSuffix =
     attentionCount > 0
@@ -77,7 +68,7 @@ export const InAppAiAgentButton = ({
       variant="outline"
       // Count lives on the button name — a nested badge aria-label is ignored
       // once the parent already has aria-label.
-      aria-label={`${open ? "Close" : "Open"} assistant${attentionSuffix}`}
+      aria-label={`${open ? "Close" : "Open"} Halo${attentionSuffix}`}
       aria-pressed={open}
       data-ignore-outside-interaction
       onClick={() => toggleAssistant("top_nav")}
@@ -103,9 +94,7 @@ export const InAppAiAgentButton = ({
           "border-primary-accent bg-primary-accent/10 hover:bg-primary-accent/15",
       )}
     >
-      <BotMessageSquare
-        className={cn("h-4 w-4", prominent && open && "text-primary-accent")}
-      />
+      <HaloIcon variant={prominent && open ? "launcherActive" : "launcher"} />
       {/* Conversations still owed a look. Anchored to the button rather than
           the icon so it survives the prominent (icon-only) variant. Visual
           only — accessible name is on the button. */}
@@ -122,7 +111,7 @@ export const InAppAiAgentButton = ({
           reveal in the 640–767px band and overflow the box. */}
       {!prominent && (
         <>
-          <span className="hidden sm:inline">Assistant</span>
+          <span className="hidden sm:inline">Halo</span>
           <span className="hidden md:inline-flex">
             <KeyboardShortcut variant="subtle" keys={["Mod", "I"]} />
           </span>

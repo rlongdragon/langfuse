@@ -1,3 +1,4 @@
+/* eslint-disable @repo/component-file-structure */
 import type { ComponentProps } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 
@@ -76,9 +77,9 @@ export function AIAssistedInput({
               }
             >
               {isGenerating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="icon-sm text-icon-foreground animate-spin" />
               ) : (
-                <Sparkles className="h-3.5 w-3.5" />
+                <Sparkles className="icon-sm text-icon-foreground" />
               )}
             </Button>
           </TooltipTrigger>

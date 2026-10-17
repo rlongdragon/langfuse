@@ -1,23 +1,18 @@
+/* eslint-disable @repo/component-file-structure */
 import { api } from "@/src/utils/api";
+import { useState } from "react";
 import { AnnotationQueueItemsTable } from "@/src/features/annotation-queues/components/AnnotationQueueItemsTable";
-import { CardDescription } from "@/src/components/ui/card";
-import { Button } from "@/src/components/ui/button";
+import { Button } from "@/src/components/design-system/Button/Button";
 import { ClipboardPen, Lock } from "lucide-react";
-import { Badge } from "@/src/components/ui/badge";
-import Link from "next/link";
-import { CreateOrEditAnnotationQueueButton } from "@/src/features/annotation-queues/components/CreateOrEditAnnotationQueueButton";
-import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
-import { SupportOrUpgradePage } from "@/src/ee/features/billing/components/SupportOrUpgradePage";
-import { Skeleton } from "@/src/components/ui/skeleton";
+import { useHasProjectAccess } from "@/src/features/rbac";
+import { SupportOrUpgradePage } from "@/src/ee/features/billing";
 import Page from "@/src/components/layouts/page";
 import {
   SidePanel,
   SidePanelContent,
   SidePanelHeader,
-  SidePanelTitle,
 } from "@/src/components/ui/side-panel";
-import { SubHeaderLabel } from "@/src/components/layouts/header";
-import { getScoreDataTypeIcon } from "@/src/features/scores/lib/scoreColumns";
+import { AnnotationQueueSetupController } from "@/src/features/annotation-queues/components/AnnotationQueueSetupController";
 
 export default function QueueItems({
   projectId,
@@ -26,6 +21,7 @@ export default function QueueItems({
   projectId: string;
   queueId: string;
 }) {
+  const [mobileSetupOpen, setMobileSetupOpen] = useState(false);
   const queue = api.annotationQueues.byId.useQuery(
     {
       queueId,
@@ -57,64 +53,44 @@ export default function QueueItems({
           },
         ],
         actionButtonsRight: !hasWriteAccess ? (
-          <Button disabled>
-            <Lock className="mr-1 h-4 w-4" />
-            <span className="text-sm">Process queue</span>
-          </Button>
+          <Button disabled icon={Lock} text="Process queue" />
         ) : (
-          <Button asChild>
-            <Link
-              href={`/project/${projectId}/annotation-queues/${queueId}/items`}
-            >
-              <ClipboardPen className="mr-1 h-4 w-4" />
-              <span className="text-sm">Process queue</span>
-            </Link>
-          </Button>
+          <Button
+            href={`/project/${projectId}/annotation-queues/${queueId}/items`}
+            icon={ClipboardPen}
+            text="Process queue"
+          />
         ),
       }}
     >
-      <div className="grid flex-1 grid-cols-[1fr_auto] overflow-hidden">
-        <div className="flex h-full flex-col overflow-hidden">
+      <div className="grid flex-1 grid-cols-[minmax(0,1fr)_auto] overflow-hidden">
+        <div className="flex h-full min-w-0 flex-col overflow-hidden">
           <AnnotationQueueItemsTable projectId={projectId} queueId={queueId} />
         </div>
-        <SidePanel
-          mobileTitle={queue.data?.name ?? "Queue details"}
-          id="queue-details"
-        >
-          <SidePanelHeader>
-            <SidePanelTitle>
-              {queue.data?.name ?? "Queue details"}
-            </SidePanelTitle>
-            <CreateOrEditAnnotationQueueButton
-              projectId={projectId}
-              queueId={queueId}
-            />
-          </SidePanelHeader>
-          <SidePanelContent>
-            {queue.isLoading ? (
-              <Skeleton className="h-full w-full" />
-            ) : (
-              <>
-                {queue.data?.description && (
-                  <CardDescription className="text-sm">
-                    {queue.data?.description}
-                  </CardDescription>
-                )}
-                <div className="flex flex-col gap-2">
-                  <SubHeaderLabel title="Score Configs" />
-                  <div className="flex flex-wrap gap-2">
-                    {queue.data?.scoreConfigs.map((scoreConfig) => (
-                      <Badge key={scoreConfig.id} variant="outline">
-                        {getScoreDataTypeIcon(scoreConfig.dataType)}
-                        <span className="ml-0.5">{scoreConfig.name}</span>
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </SidePanelContent>
-        </SidePanel>
+        <AnnotationQueueSetupController
+          key={`${projectId}:${queueId}`}
+          projectId={projectId}
+          queueId={queueId}
+          renderLayout={(content) => (
+            <SidePanel
+              mobileTitle="Queue setup"
+              id="queue-details"
+              scrollable={false}
+              variant="sidebar"
+              mobileOpenState={{
+                open: mobileSetupOpen,
+                onOpenChange: setMobileSetupOpen,
+              }}
+            >
+              <SidePanelHeader>
+                <span className="text-sm font-bold">Queue setup</span>
+              </SidePanelHeader>
+              <SidePanelContent className="isolate min-h-0 flex-1 gap-0">
+                {content}
+              </SidePanelContent>
+            </SidePanel>
+          )}
+        />
       </div>
     </Page>
   );

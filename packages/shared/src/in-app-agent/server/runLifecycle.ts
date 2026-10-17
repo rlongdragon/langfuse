@@ -10,16 +10,15 @@ import { logger } from "../../server";
 import { recordRunTerminalOutcome } from "./runMetrics";
 import { buildInAppAgentApprovalDecisionEvent } from "../approvalEvents";
 import type { AgUiEvent } from "../schema";
+import type { InAppAgentToolInputs } from "../toolInputs";
 import type { InAppAgentPrefixedLangfuseMcpToolName } from "./mcpPolicy";
 import {
+  IN_APP_AGENT_UNSETTLED_RUN_STATUSES,
   InAppAgentRunRequestSchema,
+  isSettledInAppAgentRunStatus,
   resolveInAppAgentRootRunId,
   type InAppAgentRunRequest,
 } from "../../features/inAppAgent/types";
-import {
-  IN_APP_AGENT_UNSETTLED_RUN_STATUSES,
-  isSettledInAppAgentRunStatus,
-} from "../constants";
 import {
   ACTIVE_RUN_CONFLICT_MESSAGE,
   lockConversation,
@@ -230,6 +229,8 @@ export async function decideToolApproval(params: {
   decidedByUserId: string;
   /** Prefixed tool resolved from the persisted interrupt, never client input. */
   alwaysAllowToolName?: InAppAgentPrefixedLangfuseMcpToolName;
+  /** Tool input, already validated against the persisted interrupt. */
+  toolInputs?: InAppAgentToolInputs;
   model?: string;
 }): Promise<InAppAgentRun> {
   const outcome = await params.prisma.$transaction(async (tx) => {
@@ -379,6 +380,7 @@ export async function decideToolApproval(params: {
           continuationNumber,
           toolCallId: params.toolCallId,
           approved: params.approved,
+          ...(params.toolInputs ? { toolInputs: params.toolInputs } : {}),
           context: parentRequest.success ? parentRequest.data.context : [],
         },
       }),
@@ -519,18 +521,21 @@ async function cancelRunInTransaction(params: {
   runId: string;
   runStatus: InAppAgentRunStatus;
 }): Promise<CancelRunResult> {
-  const immediateCancel =
-    params.runStatus === InAppAgentRunStatus.QUEUED
-      ? {
-          errorCode: InAppAgentRunErrorCode.CANCELLED,
-          errorMessage: "Cancelled before a worker picked the run up",
-        }
-      : params.runStatus === InAppAgentRunStatus.AWAITING_APPROVAL
-        ? {
-            errorCode: InAppAgentRunErrorCode.APPROVAL_CANCELLED,
-            errorMessage: "Approval cancelled",
-          }
-        : null;
+  const immediateCancel = (() => {
+    if (params.runStatus === InAppAgentRunStatus.QUEUED) {
+      return {
+        errorCode: InAppAgentRunErrorCode.CANCELLED,
+        errorMessage: "Cancelled before a worker picked the run up",
+      };
+    }
+    if (params.runStatus === InAppAgentRunStatus.AWAITING_APPROVAL) {
+      return {
+        errorCode: InAppAgentRunErrorCode.APPROVAL_CANCELLED,
+        errorMessage: "Approval cancelled",
+      };
+    }
+    return null;
+  })();
 
   if (immediateCancel) {
     const { count } = await params.tx.inAppAgentRun.updateMany({

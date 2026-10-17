@@ -1,19 +1,26 @@
+/* eslint-disable no-nested-ternary */
 import { DataTable } from "@/src/components/table/data-table";
 import { type LangfuseColumnDef } from "@/src/components/table/types";
 import { createLinkTableColumn } from "@/src/components/design-system/table/columns/createLinkTableColumn";
 import { api } from "@/src/utils/api";
 import { formatIntervalSeconds } from "@/src/utils/dates";
+import { usdFormatter } from "@/src/utils/numbers";
 import { useQueryParams, withDefault, NumberParam } from "use-query-params";
-import useColumnVisibility from "@/src/features/column-visibility/hooks/useColumnVisibility";
+import {
+  useColumnOrder,
+  useColumnVisibility,
+} from "@/src/features/column-visibility";
 import { DataTableToolbar } from "@/src/components/table/data-table-toolbar";
-import { useDetailPageLists } from "@/src/features/navigate-detail-pages/context";
+import { useDetailPageLists } from "@/src/features/navigate-detail-pages";
 import { useEffect, useMemo } from "react";
-import { useRowHeightLocalStorage } from "@/src/components/table/data-table-row-height-switch";
+import {
+  customRowHeightMenu,
+  isCompactRowHeight,
+  useRowHeightLocalStorage,
+} from "@/src/components/table/data-table-row-height-switch";
 import { ListTree } from "lucide-react";
-import { useScoreColumns } from "@/src/features/scores/hooks/useScoreColumns";
-import useColumnOrder from "@/src/features/column-visibility/hooks/useColumnOrder";
+import { scoreFilters, useScoreColumns } from "@/src/features/scores";
 import { Skeleton } from "@/src/components/ui/skeleton";
-import { scoreFilters } from "@/src/features/scores/lib/scoreColumns";
 import {
   DatasetItemIOCell,
   TraceObservationIOCell,
@@ -22,7 +29,8 @@ import { datasetRunItemsTableColsWithOptions } from "@langfuse/shared";
 import { convertRunItemToItemsByRunUiTableRow } from "@/src/features/datasets/lib/convertRunItemDataToUiTableRow";
 import { type DatasetRunItemByRunRowData } from "@/src/features/datasets/lib/types";
 import { createDateTableColumn } from "@/src/components/design-system/table/columns/createDateTableColumn";
-import { useQueryFilterState } from "@/src/features/filters/hooks/useFilterState";
+import { createNumberTableColumn } from "@/src/components/design-system/table/columns/createNumberTableColumn";
+import { useQueryFilterState } from "@/src/features/filters";
 import { useDebounce } from "@/src/hooks/useDebounce";
 
 export function DatasetRunItemsByRunTable(props: {
@@ -38,7 +46,15 @@ export function DatasetRunItemsByRunTable(props: {
     pageSize: withDefault(NumberParam, 20),
   });
 
-  const [rowHeight, setRowHeight] = useRowHeightLocalStorage("traces", "m");
+  const [rowHeight, setRowHeight, rowHeights] = useRowHeightLocalStorage(
+    "traces",
+    "m",
+  );
+  const compactRows = isCompactRowHeight(
+    rowHeight,
+    rowHeights.mode,
+    rowHeights.activeHeightPx,
+  );
 
   const [userFilterState, setUserFilterState] = useQueryFilterState(
     [],
@@ -112,7 +128,7 @@ export function DatasetRunItemsByRunTable(props: {
         return {
           type: "link",
           props: {
-            path: `/project/${projectId}/datasets/${datasetId}/items/${datasetItemId}${versionParam}`,
+            path: `/project/${projectId}/datasets/${datasetId}/items/${encodeURIComponent(datasetItemId)}${versionParam}`,
             value: datasetItemId,
           },
         };
@@ -161,21 +177,16 @@ export function DatasetRunItemsByRunTable(props: {
       cell: ({ row }) => {
         const latency: DatasetRunItemByRunRowData["latency"] =
           row.getValue("latency");
-        return <>{!!latency ? formatIntervalSeconds(latency) : null}</>;
+        return !!latency ? formatIntervalSeconds(latency) : null;
       },
     },
-    {
+    createNumberTableColumn<DatasetRunItemByRunRowData>({
       accessorKey: "totalCost",
       header: "Cost",
-      id: "totalCost",
       size: 60,
       enableHiding: true,
-      cell: ({ row }) => {
-        const totalCost: DatasetRunItemByRunRowData["totalCost"] =
-          row.getValue("totalCost");
-        return totalCost ?? undefined;
-      },
-    },
+      formatter: (value) => usdFormatter(value),
+    }),
     {
       accessorKey: "scores",
       header: "Scores",
@@ -206,7 +217,7 @@ export function DatasetRunItemsByRunTable(props: {
             observationId={trace.observationId}
             io="input"
             fromTimestamp={runAt}
-            singleLine={rowHeight === "s"}
+            singleLine={compactRows}
           />
         ) : null;
       },
@@ -230,7 +241,7 @@ export function DatasetRunItemsByRunTable(props: {
             observationId={trace.observationId}
             io="output"
             fromTimestamp={runAt}
-            singleLine={rowHeight === "s"}
+            singleLine={compactRows}
           />
         ) : null;
       },
@@ -251,7 +262,7 @@ export function DatasetRunItemsByRunTable(props: {
             datasetItemId={datasetItemId}
             datasetItemVersion={row.original.datasetItemVersion}
             io="expectedOutput"
-            singleLine={rowHeight === "s"}
+            singleLine={compactRows}
           />
         ) : null;
       },
@@ -292,6 +303,7 @@ export function DatasetRunItemsByRunTable(props: {
         setColumnOrder={setColumnOrder}
         rowHeight={rowHeight}
         setRowHeight={setRowHeight}
+        customRowHeight={customRowHeightMenu(rowHeights)}
       />
       <DataTable
         tableName="datasetRunItems"
@@ -321,6 +333,9 @@ export function DatasetRunItemsByRunTable(props: {
         columnOrder={columnOrder}
         onColumnOrderChange={setColumnOrder}
         rowHeight={rowHeight}
+        customRowHeightPx={rowHeights.activeHeightPx}
+        onCustomRowHeightChange={rowHeights.setCustomPx}
+        onSelectRowHeight={setRowHeight}
       />
     </>
   );

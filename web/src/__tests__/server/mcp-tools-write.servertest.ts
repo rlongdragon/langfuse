@@ -44,6 +44,7 @@ vi.mock(
 import { prisma, Role } from "@langfuse/shared/src/db";
 import { nanoid } from "nanoid";
 import { z } from "zod";
+import { ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import {
   createInAppAgentMcpContext,
   createMcpTestSetup,
@@ -88,7 +89,20 @@ import {
   deleteEvaluatorTool,
   handleDeleteEvaluator,
 } from "@/src/features/mcp/server/evals/tools/deleteEvaluator";
+import {
+  handleTestEvaluator,
+  testEvaluatorTool,
+} from "@/src/features/mcp/server/evals/tools/testEvaluator";
+import {
+  deleteExternalMediaStorageTool,
+  handleConfigureExternalMediaStorage,
+  handleDeleteExternalMediaStorage,
+  handleGetExternalMediaStorage,
+} from "@/src/features/mcp/server/externalMediaStorage/tools";
+import { externalMediaStorageFeature } from "@/src/features/mcp/server/externalMediaStorage";
+import { evalsFeature } from "@/src/features/mcp/server/evals";
 import { handleGetEvaluationRule } from "@/src/features/mcp/server/evals/tools/getEvaluationRule";
+import { EvaluatorService } from "@/src/features/evals/v2/server/evaluators/evaluatorService";
 import {
   attachEvaluatorToEvaluationRuleTool,
   detachEvaluatorFromEvaluationRuleTool,
@@ -191,6 +205,211 @@ describe("MCP Write Tools", () => {
   });
 
   describe("stable evaluator tools", () => {
+    it("tests the latest saved evaluator against a project observation", async () => {
+      const setup = await createMcpTestSetup();
+      const evaluator = await createStableLlmEvaluatorForMcpWriteTest(setup);
+      await handleUpdateEvaluator(
+        {
+          evaluatorId: evaluator.id,
+          name: evaluator.name,
+          type: "LLM_AS_JUDGE",
+          prompt: "Latest evaluator prompt for {{input}}",
+          outputDefinition: mcpEvalOutputDefinition,
+          variableMapping: [
+            { templateVariable: "input", selectedColumnId: "input" },
+          ],
+        },
+        setup.context,
+      );
+
+      const observationId = nanoid();
+      const traceId = nanoid();
+      const startTime = "2026-08-11T12:00:00.000Z";
+      const unifiedResult = {
+        success: true as const,
+        result: {
+          dataType: "NUMERIC" as const,
+          score: 1,
+          reasoning: "passes",
+        },
+        interpolatedPrompt: "Latest evaluator prompt for sample input",
+        model: "test-model",
+        provider: "test-provider",
+        executionTraceId: "execution-trace-id",
+        estimatedCostUsd: null,
+        durationMs: 25,
+      };
+      const testEvaluatorSpy = vi
+        .spyOn(EvaluatorService.prototype, "testEvaluator")
+        .mockResolvedValue(unifiedResult);
+
+      try {
+        verifyToolAnnotations(testEvaluatorTool, { expensiveHint: true });
+        expect(testEvaluatorTool.annotations?.readOnlyHint).not.toBe(true);
+        expect(testEvaluatorTool.annotations?.destructiveHint).not.toBe(true);
+        expect(testEvaluatorTool.inputSchema.properties).toEqual(
+          expect.objectContaining({
+            evaluatorId: expect.any(Object),
+            type: expect.any(Object),
+            prompt: expect.any(Object),
+            questions: expect.any(Object),
+            sourceCode: expect.any(Object),
+            observationId: expect.any(Object),
+            traceId: expect.any(Object),
+            startTime: expect.any(Object),
+          }),
+        );
+        expect(
+          evalsFeature.tools.some(
+            ({ definition }) => definition.name === "testEvaluator",
+          ),
+        ).toBe(true);
+
+        await expect(
+          handleTestEvaluator(
+            {
+              evaluatorId: evaluator.id,
+              observationId,
+              traceId,
+              startTime,
+            } as never,
+            setup.context,
+          ),
+        ).resolves.toEqual(unifiedResult);
+        expect(testEvaluatorSpy).toHaveBeenNthCalledWith(1, {
+          orgId: setup.orgId,
+          projectId: setup.projectId,
+          evaluatorId: evaluator.id,
+          observationId,
+          traceId,
+          startTime: new Date(startTime),
+        });
+
+        await expect(
+          handleTestEvaluator(
+            {
+              type: "CODE",
+              sourceCode: "return { score: 1 };",
+              sourceCodeLanguage: "TYPESCRIPT",
+              observationId,
+              traceId,
+              startTime,
+            } as never,
+            setup.context,
+          ),
+        ).resolves.toEqual(unifiedResult);
+        expect(testEvaluatorSpy).toHaveBeenNthCalledWith(2, {
+          orgId: setup.orgId,
+          projectId: setup.projectId,
+          definition: {
+            type: "CODE",
+            sourceCode: "return { score: 1 };",
+            sourceCodeLanguage: "TYPESCRIPT",
+          },
+          observationId,
+          traceId,
+          startTime: new Date(startTime),
+        });
+
+        await expect(
+          handleTestEvaluator(
+            {
+              type: "DECISION_MODEL",
+              questions: [
+                {
+                  id: "relevant",
+                  type: "noul",
+                  scoreName: "relevant",
+                  instructions: "Determine whether the input is relevant.",
+                  criteria: null,
+                },
+              ],
+              modelConfig: {
+                provider: "typesafe",
+                model: "jev-latest",
+              },
+              variableMapping: [
+                {
+                  templateVariable: "input",
+                  selectedColumnId: "input",
+                },
+              ],
+              observationId,
+              traceId,
+              startTime,
+            } as never,
+            setup.context,
+          ),
+        ).resolves.toEqual(unifiedResult);
+        expect(testEvaluatorSpy).toHaveBeenNthCalledWith(3, {
+          orgId: setup.orgId,
+          projectId: setup.projectId,
+          definition: {
+            type: "DECISION_MODEL",
+            questions: [
+              {
+                id: "relevant",
+                type: "noul",
+                scoreName: "relevant",
+                instructions: "Determine whether the input is relevant.",
+                criteria: null,
+              },
+            ],
+            provider: "typesafe",
+            model: "jev-latest",
+            vars: ["input"],
+            variableMapping: [
+              {
+                templateVariable: "input",
+                selectedColumnId: "input",
+              },
+            ],
+          },
+          observationId,
+          traceId,
+          startTime: new Date(startTime),
+        });
+
+        await expect(
+          handleTestEvaluator(
+            { observationId, traceId, startTime } as never,
+            setup.context,
+          ),
+        ).rejects.toThrow(
+          "Provide either evaluatorId or a draft evaluator definition, but not both.",
+        );
+        await expect(
+          handleTestEvaluator(
+            {
+              evaluatorId: evaluator.id,
+              type: "CODE",
+              sourceCode: "return { score: 1 };",
+              sourceCodeLanguage: "TYPESCRIPT",
+              observationId,
+              traceId,
+              startTime,
+            } as never,
+            setup.context,
+          ),
+        ).rejects.toThrow(
+          "Provide either evaluatorId or a draft evaluator definition, but not both.",
+        );
+        await expect(
+          handleTestEvaluator(
+            {
+              evaluatorId: evaluator.id,
+              observationId,
+              traceId,
+              startTime: null,
+            } as never,
+            setup.context,
+          ),
+        ).rejects.toThrow();
+      } finally {
+        testEvaluatorSpy.mockRestore();
+      }
+    });
+
     it("creates and versions an evaluator by stable id", async () => {
       const setup = await createMcpTestSetup();
       verifyToolAnnotations(createEvaluatorTool, { destructiveHint: true });
@@ -1762,6 +1981,71 @@ describe("MCP Write Tools", () => {
     });
   });
 
+  describe("external media storage tools", () => {
+    it("configures, reads, and deletes project storage with audit logs", async () => {
+      const setup = await createMcpTestSetup();
+
+      await expect(
+        externalMediaStorageFeature.isEnabled(setup.context),
+      ).resolves.toBe(false);
+      await prisma.organization.update({
+        where: { id: setup.context.orgId },
+        data: { featureFlagOrgDefaults: ["externalMediaStorage"] },
+      });
+      await expect(
+        externalMediaStorageFeature.isEnabled(setup.context),
+      ).resolves.toBe(true);
+
+      await expect(
+        handleConfigureExternalMediaStorage(
+          {
+            type: "S3",
+            bucketName: "media-bucket",
+            region: "us-east-1",
+            accessKeyId: "test-access-key",
+            secretAccessKey: "test-secret-key",
+            prefix: "media/",
+            forcePathStyle: false,
+          },
+          setup.context,
+        ),
+      ).resolves.toEqual({ success: true });
+
+      await expect(
+        handleGetExternalMediaStorage({}, setup.context),
+      ).resolves.toMatchObject({
+        bucketName: "media-bucket",
+        prefix: "media/",
+        secretAccessKeyDisplay: expect.not.stringContaining("test-secret-key"),
+      });
+      await expect(
+        verifyAuditLog({
+          projectId: setup.projectId,
+          apiKeyId: setup.apiKeyId,
+          resourceType: "externalMediaStorageIntegration",
+          resourceId: setup.projectId,
+          action: "update",
+        }),
+      ).resolves.toBeDefined();
+
+      verifyToolAnnotations(deleteExternalMediaStorageTool, {
+        destructiveHint: true,
+      });
+      await expect(
+        handleDeleteExternalMediaStorage({}, setup.context),
+      ).resolves.toEqual({ success: true });
+      await expect(
+        verifyAuditLog({
+          projectId: setup.projectId,
+          apiKeyId: setup.apiKeyId,
+          resourceType: "externalMediaStorageIntegration",
+          resourceId: setup.projectId,
+          action: "delete",
+        }),
+      ).resolves.toBeDefined();
+    });
+  });
+
   describe("in-app-agent protected prompt labels", () => {
     it.each([
       {
@@ -1832,7 +2116,9 @@ describe("MCP Write Tools", () => {
       if (testCase.expectForbidden) {
         await expect(update).rejects.toMatchObject({
           name: "McpError",
-          message: expect.stringContaining("Access forbidden"),
+          code: ErrorCode.InvalidRequest,
+          message:
+            "MCP error -32600: You don't have permission to add a protected label to a prompt. Please contact your project admin for assistance.\n\n Protected labels are: production",
         });
 
         const prompt = await prisma.prompt.findFirst({
@@ -1881,7 +2167,8 @@ describe("MCP Write Tools", () => {
         ),
       ).rejects.toMatchObject({
         name: "McpError",
-        message: expect.stringContaining("Access forbidden"),
+        code: ErrorCode.InvalidRequest,
+        message: `MCP error -32600: You don't have permission to create a prompt with a protected label. Please contact your project admin for assistance.\n\n Protected labels are: ${protectedLabel}`,
       });
 
       await expect(
@@ -1922,7 +2209,9 @@ describe("MCP Write Tools", () => {
         ),
       ).rejects.toMatchObject({
         name: "McpError",
-        message: expect.stringContaining("Access forbidden"),
+        code: ErrorCode.InvalidRequest,
+        message:
+          "MCP error -32600: You don't have permission to add a protected label to a prompt. Please contact your project admin for assistance.\n\n Protected labels are: production",
       });
     });
   });

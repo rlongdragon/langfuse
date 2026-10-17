@@ -1,3 +1,7 @@
+import type {
+  SkillsAvailable,
+  SkillsResourceLoaded,
+} from "../../features/skills/trace";
 import {
   asBoolean,
   asNumberRecord,
@@ -5,6 +9,7 @@ import {
   asString,
   asStringArray,
 } from "../../utils/objects";
+import type { EvalExecutionContext } from "../../features/evals/evalExecutionMetadata";
 import { stringifyValue } from "../../utils/stringChecks";
 import {
   ObservationTypeDomain,
@@ -65,6 +70,8 @@ export type InternalTraceEventInput = {
   promptId?: string;
   promptName?: string;
   promptVersion?: string;
+  skillsAvailable?: SkillsAvailable;
+  skillsResourceLoaded?: SkillsResourceLoaded;
   modelId?: string;
   modelName?: string;
   modelParameters?: string | Record<string, unknown>;
@@ -92,6 +99,7 @@ export type InternalTraceEventInput = {
   blobStorageFilePath?: string;
   eventRaw?: string;
   eventBytes?: number;
+  evaluationContext?: EvalExecutionContext;
   experimentId?: string;
   experimentName?: string;
   experimentMetadataNames?: string[];

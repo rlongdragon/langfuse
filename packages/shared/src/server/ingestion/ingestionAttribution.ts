@@ -19,11 +19,18 @@ export const INTERNAL_INGESTION_SDK_NAMES = [
 ] as const;
 
 export const LANGFUSE_SDK_LATEST_MAJOR = {
-  python: 4,
-  javascript: 5,
+  python: 5,
+  javascript: 6,
 } as const;
 
 export type IngestionSdkCanonicalName = keyof typeof LANGFUSE_SDK_LATEST_MAJOR;
+
+// First SDK majors that JSON-encode every per-key metadata value. Ingestion
+// decodes those values so they are stored exactly like a metadata blob.
+const LANGFUSE_SDK_STRUCTURED_METADATA_MIN_MAJOR = {
+  python: 5,
+  javascript: 6,
+} as const satisfies Record<IngestionSdkCanonicalName, number>;
 
 export type IngestionSdkUpgradeStatus =
   | "current"
@@ -134,6 +141,22 @@ export const extractBaseIngestionSdkVersion = (sdkVersion: string): string => {
   return version;
 };
 
+export const isStructuredMetadataSdkVersion = (params: {
+  sdkName: IngestionSdkCanonicalName | null;
+  sdkVersion: string | null | undefined;
+}): boolean => {
+  if (!params.sdkName || !params.sdkVersion) return false;
+
+  const parsedVersion = parseVersionString(
+    extractBaseIngestionSdkVersion(params.sdkVersion),
+  );
+  return (
+    parsedVersion !== null &&
+    parsedVersion.major >=
+      LANGFUSE_SDK_STRUCTURED_METADATA_MIN_MAJOR[params.sdkName]
+  );
+};
+
 export const classifyIngestionSdkVersion = (params: {
   sdkName: string | null | undefined;
   sdkVersion: string | null | undefined;
@@ -201,6 +224,42 @@ export const classifyIngestionSdkAttribution = (params: {
   if (missingName) return "missing_name";
   if (missingVersion) return "missing_version";
   return "attributed";
+};
+
+const METRIC_TAG_MAX_LENGTH = 32;
+
+/**
+ * Bounds a caller-supplied SDK value for safe use as a StatsD/Datadog metric
+ * tag. Ingestion SDK name/version come straight from request headers, so
+ * without this a caller could inject oversized or separator-bearing
+ * (`,` `|` `:` `=`) tag values and inflate metric cardinality. Strips control
+ * characters and tag separators, caps length, and falls back to "unknown".
+ */
+export const sanitizeSdkMetricTagValue = (
+  value: string | null | undefined,
+): string => {
+  if (!value) {
+    return UNKNOWN_INGESTION_SDK_VALUE;
+  }
+  const sanitized = Array.from(value)
+    .filter((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      if (codePoint <= 31 || codePoint === 127) {
+        return false;
+      }
+      return (
+        character !== "," &&
+        character !== "|" &&
+        character !== ":" &&
+        character !== "="
+      );
+    })
+    .join("")
+    .trim();
+  const bounded = Array.from(sanitized)
+    .slice(0, METRIC_TAG_MAX_LENGTH)
+    .join("");
+  return bounded || UNKNOWN_INGESTION_SDK_VALUE;
 };
 
 const sanitizeCallerAttributionValue = (

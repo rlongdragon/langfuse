@@ -1,5 +1,7 @@
+/* eslint-disable boundaries/dependencies */
 import { type CellContext, type RowData } from "@tanstack/react-table";
 
+import { EmptyValue } from "@/src/components/design-system/table/components/EmptyValue/EmptyValue";
 import { Skeleton } from "@/src/components/ui/skeleton";
 import { numberFormatter } from "@/src/utils/numbers";
 import {
@@ -7,36 +9,58 @@ import {
   type TableColumnOptions,
 } from "./utils/createTableColumn";
 
-export function createNumberTableColumn<TData extends RowData>({
+export function createNumberTableColumn<
+  TData extends RowData,
+  TValue extends number | bigint = number,
+>({
   emptyValue,
-  formatter = numberFormatter,
+  formatter,
   getValue,
   ...options
-}: TableColumnOptions<TData, number> & {
+}: TableColumnOptions<TData, TValue> & {
+  /**
+   * A word to show instead of the shared empty treatment, e.g. "Unknown".
+   * An empty string keeps the cell deliberately blank.
+   */
   emptyValue?: string;
-  formatter?: (value: number) => string;
+  formatter?: (
+    value: TValue,
+    context: CellContext<TData, TValue | null | undefined>,
+  ) => string;
   getValue?: (
-    value: number | null | undefined,
-    context: CellContext<TData, number | null | undefined>,
-  ) => number | { type: "loading" } | undefined;
+    value: TValue | null | undefined,
+    context: CellContext<TData, TValue | null | undefined>,
+  ) => TValue | { type: "loading" } | undefined;
 }) {
-  return createTableColumn<TData, number>({
+  const loadingCell = <Skeleton className="h-4 w-1/2" />;
+
+  return createTableColumn<TData, TValue>({
     ...options,
-    loadingCell: <Skeleton className="h-4 w-1/2" />,
+    loadingCell,
     renderCell: (value, context) => {
       if (!getValue) {
-        if (value === null || value === undefined) return emptyValue ?? null;
-        return <span>{formatter(value)}</span>;
+        if (value === null || value === undefined)
+          return emptyValue ?? <EmptyValue />;
+        return (
+          <span>{formatter?.(value, context) ?? numberFormatter(value)}</span>
+        );
       }
 
       const resolvedValue = getValue(value, context);
 
-      if (resolvedValue === undefined) return emptyValue ?? null;
-      if (typeof resolvedValue !== "number") {
-        return <Skeleton className="h-4 w-1/2" />;
-      }
+      if (resolvedValue === undefined) return emptyValue ?? <EmptyValue />;
+      if (
+        typeof resolvedValue !== "number" &&
+        typeof resolvedValue !== "bigint"
+      )
+        return loadingCell;
 
-      return <span>{formatter(resolvedValue)}</span>;
+      return (
+        <span>
+          {formatter?.(resolvedValue, context) ??
+            numberFormatter(resolvedValue)}
+        </span>
+      );
     },
   });
 }

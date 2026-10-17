@@ -20,6 +20,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { api } from "@/src/utils/api";
+import { useLangfuseV4WriteMode } from "@/src/features/organizations";
 import { type FilterState } from "@langfuse/shared";
 import { cn } from "@/src/utils/tailwind";
 import { IOPreview } from "@/src/features/traces/components/IOPreview/IOPreview";
@@ -149,7 +150,15 @@ export function LiveView({ projectId }: { projectId: string }) {
     [fromTimestamp],
   );
 
-  const query = api.generations.all.useQuery(
+  // In events_only mode ingestion writes only to the events table, which the
+  // legacy generations list never reads.
+  const readsEvents = useLangfuseV4WriteMode() === "events_only";
+  const queryOpts = {
+    refetchInterval: live ? POLL_MS : (false as const),
+    refetchIntervalInBackground: false,
+    trpc: { context: { skipBatch: true } },
+  };
+  const legacyQuery = api.generations.all.useQuery(
     {
       projectId,
       filter,
@@ -159,16 +168,35 @@ export function LiveView({ projectId }: { projectId: string }) {
       page: 0,
       limit: FETCH_LIMIT,
     },
-    {
-      refetchInterval: live ? POLL_MS : false,
-      refetchIntervalInBackground: false,
-      trpc: { context: { skipBatch: true } },
-    },
+    { ...queryOpts, enabled: !readsEvents },
   );
+  const eventsQuery = api.events.all.useQuery(
+    {
+      projectId,
+      filter: [
+        {
+          column: "startTime",
+          type: "datetime",
+          operator: ">=",
+          value: fromTimestamp,
+        },
+      ],
+      searchQuery: null,
+      searchType: ["id"],
+      orderBy: { column: "startTime", order: "DESC" },
+      page: 1,
+      limit: FETCH_LIMIT,
+    },
+    { ...queryOpts, enabled: readsEvents },
+  );
+  const query = readsEvents ? eventsQuery : legacyQuery;
 
   /** Regrouped into traces, oldest first, spans in pre-order for the tree. */
   const groups: TraceGroup[] = useMemo(() => {
-    const rows = query.data?.generations ?? [];
+    const rows =
+      (readsEvents
+        ? eventsQuery.data?.observations
+        : legacyQuery.data?.generations) ?? [];
     const byTrace = new Map<
       string,
       { spans: Map<string, LiveSpan>; children: Map<string | null, string[]> }
@@ -264,7 +292,7 @@ export function LiveView({ projectId }: { projectId: string }) {
     }
     list.sort((a, b) => a.startMs - b.startMs);
     return list;
-  }, [query.data]);
+  }, [readsEvents, eventsQuery.data, legacyQuery.data]);
 
   const latestDataMs = useMemo(
     () => groups.reduce((m, g) => Math.max(m, g.endMs), 0),

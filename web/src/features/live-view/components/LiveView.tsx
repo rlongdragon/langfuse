@@ -75,7 +75,8 @@ const CHIP_STYLES = [
 ];
 const chipStyle = (key: string) => {
   let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < key.length; i++)
+    h = (h * 31 + key.charCodeAt(i)) % 4_294_967_296;
   return CHIP_STYLES[h % CHIP_STYLES.length];
 };
 
@@ -515,6 +516,8 @@ export function LiveView({ projectId }: { projectId: string }) {
                       ((Math.min(effEnd, g.endMs) - s.startMs) / traceDur) *
                         100,
                     );
+                    const isTick = barWidth < 1.2;
+                    const isSolidBar = !isTick && !isOpen && s.depth === 0;
                     return (
                       <div
                         key={s.id}
@@ -578,9 +581,9 @@ export function LiveView({ projectId }: { projectId: string }) {
                               className="text-muted-foreground hover:text-foreground flex shrink-0 items-center gap-0.5"
                             >
                               {isOpen ? (
-                                <ChevronDown className="h-3 w-3" />
+                                <ChevronDown className="icon-sm" />
                               ) : (
-                                <ChevronRight className="h-3 w-3" />
+                                <ChevronRight className="icon-sm" />
                               )}
                               <span className="rounded border px-1 font-mono text-[9.5px]">
                                 {s.childCount}
@@ -624,7 +627,7 @@ export function LiveView({ projectId }: { projectId: string }) {
                               bracket end caps + a half-height rail + solid
                               segments over self time (a leaf's self time is
                               its whole span). Tiny spans become one tick. */}
-                            {barWidth < 1.2 ? (
+                            {isTick ? (
                               <span
                                 className="absolute top-1/2 h-[11px] w-[2px] -translate-y-1/2"
                                 style={{
@@ -632,7 +635,8 @@ export function LiveView({ projectId }: { projectId: string }) {
                                   backgroundColor: colorValue,
                                 }}
                               />
-                            ) : !isOpen && s.depth === 0 ? (
+                            ) : null}
+                            {isSolidBar ? (
                               <span
                                 className={cn(
                                   "absolute top-1/2 h-[8px] -translate-y-1/2 rounded-[2px]",
@@ -644,7 +648,8 @@ export function LiveView({ projectId }: { projectId: string }) {
                                   backgroundColor: colorValue,
                                 }}
                               />
-                            ) : (
+                            ) : null}
+                            {!isTick && !isSolidBar ? (
                               <span
                                 className={cn(
                                   "absolute top-0 h-full",
@@ -683,7 +688,7 @@ export function LiveView({ projectId }: { projectId: string }) {
                                   />
                                 ))}
                               </span>
-                            )}
+                            ) : null}
                           </div>
                           <span
                             className={cn(
@@ -771,7 +776,7 @@ function DetailPanel({
           aria-label="Close detail"
           className="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5"
         >
-          <X className="h-4 w-4" />
+          <X className="icon-base" />
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -808,12 +813,10 @@ function DetailPanel({
               observationName={o.name ?? undefined}
             />
           </>
-        ) : obs.isError ? (
-          <p className="text-muted-foreground text-xs">
-            Could not load this observation.
-          </p>
         ) : (
-          <p className="text-muted-foreground text-xs">Loading…</p>
+          <p className="text-muted-foreground text-xs">
+            {obs.isError ? "Could not load this observation." : "Loading…"}
+          </p>
         )}
       </div>
     </div>

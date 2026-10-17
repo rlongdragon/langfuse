@@ -147,7 +147,7 @@ export const ROUTES: Route[] = [
     productModule: "tracing",
     group: RouteGroup.Observability,
     section: RouteSection.Main,
-    pathname: `/project/[projectId]/live`,
+    href: `/project/[projectId]/live`,
   },
   {
     title: "Users",

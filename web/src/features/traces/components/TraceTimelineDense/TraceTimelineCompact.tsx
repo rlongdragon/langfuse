@@ -136,7 +136,7 @@ export function TraceTimelineCompact() {
               aria-label="Close inline detail"
               className="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5"
             >
-              <X className="h-4 w-4" />
+              <X className="icon-base" />
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">

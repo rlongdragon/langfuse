@@ -191,7 +191,7 @@ export function LiveView({ projectId }: { projectId: string }) {
   );
   const query = readsEvents ? eventsQuery : legacyQuery;
 
-  /** Regrouped into traces, oldest first, spans in pre-order for the tree. */
+  /** Regrouped into traces, newest first, spans in pre-order for the tree. */
   const groups: TraceGroup[] = useMemo(() => {
     const rows =
       (readsEvents
@@ -290,7 +290,7 @@ export function LiveView({ projectId }: { projectId: string }) {
       }
       list.push({ traceId, traceName, startMs, endMs, spans: ordered });
     }
-    list.sort((a, b) => a.startMs - b.startMs);
+    list.sort((a, b) => b.startMs - a.startMs);
     return list;
   }, [readsEvents, eventsQuery.data, legacyQuery.data]);
 
